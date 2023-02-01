@@ -1,0 +1,22 @@
+syntax = "proto3";
+package paxos_client;
+option java_multiple_files = true;
+option java_package = "today.ihelio.paxoscomponents";
+
+message DataInsertionRequest {
+  string id = 1;
+  string idempotent_key = 2;
+  string key = 3;
+  string value = 4;
+}
+
+message DataInsertionResponse {
+  string id = 1;
+  string status = 2;
+  string key = 3;
+  string value = 4;
+}
+
+service PaxosClientService {
+  rpc CreateDate(DataInsertionRequest) returns (DataInsertionResponse);
+}

@@ -1,0 +1,40 @@
+syntax = "proto3";
+package paxos_server;
+option java_multiple_files = true;
+option java_package = "today.ihelio.paxoscomponents";
+
+message PrepareRequest {
+  string proposal = 1;
+}
+
+message AcceptRequest {
+  string proposal = 1;
+  string index = 2;
+  string value = 3;
+  string firstUnchosenIndex = 4;
+}
+
+message SuccessRequest {
+  string index = 1;
+  string value = 2;
+}
+
+message AcceptorResponse {
+  string firstUnchosenIndex = 1;
+  string noUnacceptedValue = 2;
+}
+
+message HeartbeatRequest {
+  string hostId = 1;
+}
+
+message HeartbeatResponse {
+  string received = 1;
+}
+
+service PaxosServerService {
+  rpc MakeProposalMsg(PrepareRequest) returns (AcceptorResponse) {};
+  rpc MakeAcceptMsg(AcceptRequest) returns (AcceptorResponse) {};
+  rpc MakeSuccessMsg(SuccessRequest) returns (AcceptorResponse) {};
+  rpc SendHeartBeat(HeartbeatRequest) returns (HeartbeatResponse) {};
+}

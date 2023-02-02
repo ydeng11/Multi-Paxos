@@ -1,4 +1,4 @@
 package today.ihelio.paxos;
 
-public class PaxosClient {
+public interface PaxosClient {
 }

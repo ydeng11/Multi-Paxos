@@ -5,10 +5,12 @@ import com.google.common.collect.ImmutableList;
 import io.grpc.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import today.ihelio.paxos.utility.HostPorts;
 import today.ihelio.paxoscomponents.HeartbeatRequest;
 import today.ihelio.paxoscomponents.HeartbeatResponse;
 import today.ihelio.paxoscomponents.PaxosServerServiceGrpc;
 
+import javax.inject.Inject;
 import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
@@ -28,8 +30,10 @@ public class PaxosHost {
     private final ExecutorService pool = Executors.newCachedThreadPool();
     private final String HOST = "0.0.0.0";
     private final List<Integer> peerHosts = ImmutableList.of(14141, 14142, 14143);
+    private final HostPorts hostPorts;
     
-    public PaxosHost (int port) {
+    @Inject
+    public PaxosHost (int port, HostPorts hostPorts) {
         this.port = port;
         this.server = ServerBuilder.forPort(port).addService(new PaxosService(paxosServer)).build();
         this.channelForPeers = new ConcurrentHashMap<>();
@@ -41,13 +45,15 @@ public class PaxosHost {
             this.channelForPeers.putIfAbsent(portID, ManagedChannelBuilder.forAddress(HOST, portID).usePlaintext().build());
             this.blockingStubForPeers.putIfAbsent(portID, PaxosServerServiceGrpc.newBlockingStub(this.channelForPeers.get(portID)));
         }
+        this.hostPorts = hostPorts;
     }
     public PaxosHost (int port, Server server, ConcurrentHashMap<Integer, ManagedChannel> channelForPeers,
-                      ConcurrentHashMap<Integer, PaxosServerServiceGrpc.PaxosServerServiceBlockingStub> blockingStubForPeers) {
+                      ConcurrentHashMap<Integer, PaxosServerServiceGrpc.PaxosServerServiceBlockingStub> blockingStubForPeers, HostPorts hostPorts) {
         this.port = port;
         this.server = server;
         this.channelForPeers = channelForPeers;
         this.blockingStubForPeers = blockingStubForPeers;
+        this.hostPorts = hostPorts;
     }
     
     /** Start serving requests. */

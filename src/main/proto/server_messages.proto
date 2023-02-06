@@ -3,8 +3,17 @@ package paxos_server;
 option java_multiple_files = true;
 option java_package = "today.ihelio.paxoscomponents";
 
+message Proposal {
+  int32 proposalNumber = 1;
+  int32 hostID = 2;
+}
+
 message PrepareRequest {
-  int32 proposal = 1;
+  Proposal proposal = 1;
+}
+
+message PrepareResponse {
+  Proposal proposal = 1;
 }
 
 message AcceptRequest {
@@ -33,7 +42,7 @@ message HeartbeatResponse {
 }
 
 service PaxosServerService {
-  rpc MakeProposalMsg(PrepareRequest) returns (AcceptorResponse) {};
+  rpc MakeProposalMsg(PrepareRequest) returns (PrepareResponse) {};
   rpc MakeAcceptMsg(AcceptRequest) returns (AcceptorResponse) {};
   rpc MakeSuccessMsg(SuccessRequest) returns (AcceptorResponse) {};
   rpc SendHeartBeat(HeartbeatRequest) returns (HeartbeatResponse) {};

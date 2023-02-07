@@ -1,18 +1,20 @@
 package today.ihelio.paxos;
 
 
-import com.google.common.collect.ImmutableList;
-import io.grpc.*;
+import io.grpc.ManagedChannel;
+import io.grpc.ManagedChannelBuilder;
+import io.grpc.Server;
+import io.grpc.ServerBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import today.ihelio.paxos.utility.HostPorts;
+import today.ihelio.paxos.utility.PaxosServerUtil;
 import today.ihelio.paxoscomponents.HeartbeatRequest;
 import today.ihelio.paxoscomponents.HeartbeatResponse;
 import today.ihelio.paxoscomponents.PaxosServerServiceGrpc;
 
 import javax.inject.Inject;
 import java.io.IOException;
-import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -29,16 +31,15 @@ public class PaxosHost {
 //    private final PaxosServerServiceGrpc.PaxosServerServiceStub asyncStub;
     private final ExecutorService pool = Executors.newCachedThreadPool();
     private final String HOST = "0.0.0.0";
-    private final List<Integer> peerHosts = ImmutableList.of(14141, 14142, 14143);
-    private final HostPorts hostPorts;
-    
     @Inject
+    private final HostPorts hostPorts;
+
     public PaxosHost (int port, HostPorts hostPorts) {
         this.port = port;
         this.server = ServerBuilder.forPort(port).addService(new PaxosService(paxosServer)).build();
         this.channelForPeers = new ConcurrentHashMap<>();
         this.blockingStubForPeers = new ConcurrentHashMap<>();
-        for (int portID: peerHosts) {
+        for (int portID: hostPorts.ports()) {
             if (portID == port) {
                 continue;
             }
@@ -82,7 +83,7 @@ public class PaxosHost {
                     } catch (InterruptedException e) {
                         throw new RuntimeException(e);
                     }
-                    for (int peerPort: peerHosts) {
+                    for (int peerPort: hostPorts.ports()) {
                         if (peerPort == port) {
                             continue;
                         }
@@ -90,10 +91,10 @@ public class PaxosHost {
                         HeartbeatResponse response = HeartbeatResponse.getDefaultInstance();
                         try {
                             response = blockingStubForPeers.get(peerPort).withDeadlineAfter(5, SECONDS).sendHeartBeat(request);
+                            logger.info(response.toString());
                         } catch (Exception e) {
                             logger.error("request failed " + e.getMessage());
                         }
-                        logger.info(response.toString());
                     }
                     }
                 }
@@ -111,24 +112,9 @@ public class PaxosHost {
     /**
      * Await termination on the main thread since the grpc library uses daemon threads.
      */
-    private void blockUntilShutdown() throws InterruptedException {
+    void blockUntilShutdown () throws InterruptedException {
         if (server != null) {
             server.awaitTermination();
         }
     }
-    
-    /**
-     * Main method.  This comment makes the linter happy.
-     */
-    public static void main(String[] args) throws Exception {
-        if (args.length == 0) {
-			logger.error("no arguments passed!");
-            System.exit(1);
-        }
-        int port = Integer.valueOf(args[0]);
-        PaxosHost host = new PaxosHost(port);
-        host.start();
-        host.blockUntilShutdown();
-    }
-
 }

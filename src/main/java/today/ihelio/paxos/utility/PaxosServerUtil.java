@@ -1,4 +1,4 @@
-package today.ihelio.paxos;
+package today.ihelio.paxos.utility;
 
 public class PaxosServerUtil {
 	public static long getProcessID() {

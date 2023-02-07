@@ -13,11 +13,10 @@ public class ConfigModule extends AbstractModule {
 	private final HostPorts hostPorts;
 	private final String PORTS_YAML = "host_ports.yaml";
 	public ConfigModule () {
-		Yaml yaml = new Yaml(new Constructor(HostPorts.class));
+		Yaml yaml = new Yaml();
 		InputStream inputStream = this.getClass()
 				.getClassLoader()
 				.getResourceAsStream(PORTS_YAML);
-		HostPorts hostPorts = yaml.load(inputStream);
 		Map<String, List<Integer>> yamlObj = yaml.load(inputStream);
 		this.hostPorts = new HostPorts(yamlObj.get("ports"));
 	}

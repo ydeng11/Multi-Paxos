@@ -13,6 +13,7 @@ import today.ihelio.paxoscomponents.HeartbeatRequest;
 import today.ihelio.paxoscomponents.HeartbeatResponse;
 import today.ihelio.paxoscomponents.PaxosServerServiceGrpc;
 
+import javax.inject.Inject;
 import java.io.IOException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -30,8 +31,9 @@ public class PaxosHost {
 //    private final PaxosServerServiceGrpc.PaxosServerServiceStub asyncStub;
     private final ExecutorService pool = Executors.newCachedThreadPool();
     private final String HOST = "0.0.0.0";
+    @Inject
     private final HostPorts hostPorts;
-    
+
     public PaxosHost (int port, HostPorts hostPorts) {
         this.port = port;
         this.server = ServerBuilder.forPort(port).addService(new PaxosService(paxosServer)).build();

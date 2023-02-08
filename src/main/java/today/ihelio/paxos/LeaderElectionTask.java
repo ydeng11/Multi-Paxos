@@ -2,12 +2,13 @@ package today.ihelio.paxos;
 
 
 import com.google.common.base.Stopwatch;
+import javax.inject.Provider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
-
+import today.ihelio.paxos.utility.Leader;
 
 public class LeaderElectionTask {
 	private final Logger logger = LoggerFactory.getLogger(LeaderElectionTask.class);
@@ -49,9 +50,6 @@ public class LeaderElectionTask {
 				restartStopwatch();
 			}
 		}
-//		if (stopwatch.elapsed(TimeUnit.MILLISECONDS) % 999 == 0) {
-//			logger.info(this.toString() + "");
-//		}
 	}
 	
 	private void restartStopwatch() {

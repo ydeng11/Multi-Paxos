@@ -23,7 +23,7 @@ import static java.util.concurrent.TimeUnit.SECONDS;
 
 public class PaxosHost {
     private static final Logger logger = LoggerFactory.getLogger(PaxosHost.class);
-    private final PaxosServer paxosServer = new PaxosServerImpl((int) PaxosServerUtil.getProcessID());
+    private final PaxosServer paxosServer;
     private final int port;
     private final Server server;
     private final ConcurrentHashMap<Integer, ManagedChannel> channelForPeers;
@@ -36,6 +36,7 @@ public class PaxosHost {
 
     public PaxosHost (int port, HostPorts hostPorts) {
         this.port = port;
+        this.paxosServer = new PaxosServer((int) PaxosServerUtil.getProcessID(), hostPorts);
         this.server = ServerBuilder.forPort(port).addService(new PaxosService(paxosServer)).build();
         this.channelForPeers = new ConcurrentHashMap<>();
         this.blockingStubForPeers = new ConcurrentHashMap<>();
@@ -48,8 +49,9 @@ public class PaxosHost {
         }
         this.hostPorts = hostPorts;
     }
-    public PaxosHost (int port, Server server, ConcurrentHashMap<Integer, ManagedChannel> channelForPeers,
+    public PaxosHost (PaxosServer paxosServer, int port, Server server, ConcurrentHashMap<Integer, ManagedChannel> channelForPeers,
                       ConcurrentHashMap<Integer, PaxosServerServiceGrpc.PaxosServerServiceBlockingStub> blockingStubForPeers, HostPorts hostPorts) {
+        this.paxosServer = paxosServer;
         this.port = port;
         this.server = server;
         this.channelForPeers = channelForPeers;

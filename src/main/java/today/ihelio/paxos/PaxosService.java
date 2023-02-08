@@ -18,7 +18,7 @@ public class PaxosService extends today.ihelio.paxoscomponents.PaxosServerServic
 	@Override
 	public void makeProposalMsg (PrepareRequest request, StreamObserver<PrepareResponse> responseObserver) {
 		today.ihelio.paxoscomponents.Proposal proposal = request.getProposal();
-		paxosServer.processProposal(proposal);
+		//paxosServer.processProposal(proposal);
 		PrepareResponse prepareResponse = PrepareResponse.newBuilder().setProposal(proposal).build();
 		responseObserver.onNext(prepareResponse);
 		responseObserver.onCompleted();

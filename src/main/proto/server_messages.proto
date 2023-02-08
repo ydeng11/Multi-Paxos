@@ -6,6 +6,8 @@ option java_package = "today.ihelio.paxoscomponents";
 message Proposal {
   int32 proposalNumber = 1;
   int32 hostID = 2;
+  int32 index = 3;
+  string value = 4;
 }
 
 message PrepareRequest {
@@ -31,6 +33,8 @@ message SuccessRequest {
 message AcceptorResponse {
   int32 firstUnchosenIndex = 1;
   bool noUnacceptedValue = 2;
+  int32 highestProposal = 3;
+  bool responseStatus = 4;
 }
 
 message HeartbeatRequest {

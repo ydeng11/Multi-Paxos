@@ -1,6 +1,8 @@
 package today.ihelio.paxos.config;
 
 import com.google.inject.AbstractModule;
+import com.google.inject.Provides;
+import javax.inject.Named;
 import org.yaml.snakeyaml.Yaml;
 import org.yaml.snakeyaml.constructor.Constructor;
 import today.ihelio.paxos.utility.HostPorts;

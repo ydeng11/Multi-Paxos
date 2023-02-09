@@ -39,6 +39,7 @@ message AcceptorResponse {
 
 message HeartbeatRequest {
   int32 hostId = 1;
+  int32 port = 2;
 }
 
 message HeartbeatResponse {

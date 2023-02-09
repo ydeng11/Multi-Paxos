@@ -2,66 +2,72 @@ package today.ihelio.paxos;
 
 
 import com.google.common.base.Stopwatch;
+import java.util.Comparator;
+import java.util.TreeSet;
 import javax.inject.Provider;
+import javax.inject.Singleton;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import today.ihelio.paxos.common.LifeCycleListener;
+import today.ihelio.paxos.utility.AbstractHost;
 import today.ihelio.paxos.utility.Leader;
 
-public class LeaderElectionTask {
+@Singleton
+public class LeaderElectionTask implements Provider<Leader> {
 	private final Logger logger = LoggerFactory.getLogger(LeaderElectionTask.class);
-	private PaxosServer paxosServer;
 	private final Stopwatch stopwatch = Stopwatch.createUnstarted();
-	private final Stopwatch stopwatchLargestID = Stopwatch.createUnstarted();
-	private final int hostID;
-	private final AtomicReference<Integer> largestIDSeen = new AtomicReference<>();;
-	private final AtomicReference<Long> lastSeen = new AtomicReference<>();
-	
-	public LeaderElectionTask (PaxosServer paxosServer, int hostID) {
-		this.paxosServer = paxosServer;
-		this.hostID = hostID;
-		this.largestIDSeen.set(hostID);
+	private final TreeSet<AbstractHost> serverSet = new TreeSet<>((AbstractHost o1, AbstractHost o2) -> o1.getHostID() - o2.getHostID());
+	private final AtomicReference<Long> lastSeenTime = new AtomicReference<>();
+	private final AtomicReference<Leader> leader;
+	private final AbstractHost localHost;
+
+	public LeaderElectionTask (AbstractHost host) {
+		this.localHost = host;
 		this.stopwatch.start();
-		this.stopwatchLargestID.start();
-		this.lastSeen.set(System.currentTimeMillis());
+		this.lastSeenTime.set(System.currentTimeMillis());
+		this.leader = new AtomicReference<>(Leader.of(host));
 	}
-	
-	public void processHeartbeat(int otherHostID) {
+
+	public Leader getLeader() {
+		return leader.get();
+	}
+
+	@Override public Leader get() {
+		return leader.get();
+	}
+
+	public void processHeartbeat(AbstractHost host) {
+		serverSet.add(host);
 //		update the largest ID the host has ever seen since it should be the leader
-		if (otherHostID >= largestIDSeen.get()) {
-			largestIDSeen.set(otherHostID);
-			lastSeen.set(System.currentTimeMillis());
+		if (serverSet.last().equals(host)) {
+			lastSeenTime.getAndSet(System.currentTimeMillis());
 		}
-		if (System.currentTimeMillis() - lastSeen.get() > 2000) {
-			largestIDSeen.set(hostID);
-			lastSeen.set(System.currentTimeMillis());
+		if (System.currentTimeMillis() - lastSeenTime.get() > 2000) {
+			serverSet.pollLast();
+			lastSeenTime.getAndSet(System.currentTimeMillis());
 		}
-		int largestID = largestIDSeen.get();
-//		update leader ID when a new leader is found, and it is the leader
-		if (paxosServer.getLeaderID() != largestID) {
-			paxosServer.updateLeadership(largestID);
-			restartStopwatch();
-		}
-		else {
-			if (stopwatch.elapsed(TimeUnit.MILLISECONDS) > 500 && largestID == this.hostID && !paxosServer.isLeader()) {
-				paxosServer.updateLeadership(largestID);
+		AbstractHost leaderHost = serverSet.last();
+		this.leader.getAndUpdate((v) -> {
+			if (v.getHostID() != leaderHost.getHostID() && stopwatch.elapsed(TimeUnit.MILLISECONDS) > 500) {
 				restartStopwatch();
+				return Leader.of(leaderHost);
 			}
+			return v;
 		}
+		);
+//		update leader ID when a new leader is found, and it is the leader
+
 	}
 	
 	private void restartStopwatch() {
 		stopwatch.reset();
 		stopwatch.start();
 	}
-	
-	public void resetLargestSeen() {
-		largestIDSeen.set(null);
-	}
-	
+
 	public String toString() {
-		return "Host ID: " + hostID + " and its leader is: " + paxosServer.getLeaderID();
+		return "Host ID: " + localHost.getHostID() + " and its leader is: " + leader.get().getHostID();
 	}
 }

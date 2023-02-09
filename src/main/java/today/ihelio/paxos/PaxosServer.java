@@ -1,5 +1,6 @@
 package today.ihelio.paxos;
 
+import com.google.inject.name.Named;
 import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentHashMap;
@@ -7,16 +8,21 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.inject.Inject;
+import javax.inject.Provider;
+import javax.inject.Singleton;
+import today.ihelio.paxos.utility.AbstractHost;
 import today.ihelio.paxos.utility.HostPorts;
+import today.ihelio.paxos.utility.Leader;
 import today.ihelio.paxoscomponents.AcceptRequest;
 import today.ihelio.paxoscomponents.AcceptorResponse;
 import today.ihelio.paxoscomponents.DataInsertionRequest;
 import today.ihelio.paxoscomponents.Proposal;
 import today.ihelio.paxoscomponents.SuccessRequest;
 
+@Singleton
 public class PaxosServer {
-	private final AtomicReference<Integer> leader = new AtomicReference<Integer>();
-	private final int hostID;
+	private final Provider<Leader> leader;
+	private final AbstractHost host;
 	private final boolean[] choosenArray = new boolean[2000];
 	private final String[] valueArray = new String[2000];
 	private final AtomicReference<Integer> firstUnchosenIndex = new AtomicReference<>();
@@ -33,9 +39,9 @@ public class PaxosServer {
 	private final AtomicReference<Integer> proposal = new AtomicReference<Integer>();
 
 	@Inject
-	public PaxosServer(int hostID, HostPorts hostPorts) {
-		this.hostID = hostID;
-		this.leader.set(hostID);
+	public PaxosServer(@Named("LoaclHost") AbstractHost host, HostPorts hostPorts, Provider<Leader> leader) {
+		this.host = host;
+		this.leader = leader;
 		firstUnchosenIndex.set(0);
 		noMoreUnaccepted.set(true);
 		proposal.set(0);
@@ -43,18 +49,14 @@ public class PaxosServer {
 	}
 	
 	public boolean isLeader() {
-		return leader.get() == this.hostID;
+		return leader.get().getHostID() == this.host.getHostID();
 	}
 	
 	public int getHostID () {
-		return hostID;
-	}
-	
-	public void updateLeadership (int leaderID) {
-		leader.set(leaderID);
+		return this.host.getHostID();
 	}
 	public int getLeaderID() {
-		return leader.get();
+		return leader.get().getHostID();
 	}
 
 	public void addClientRequest(DataInsertionRequest dataInsertionRequest) {

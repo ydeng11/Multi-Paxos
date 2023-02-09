@@ -7,6 +7,7 @@ import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import today.ihelio.paxos.utility.AbstractHost;
 import today.ihelio.paxos.utility.HostPorts;
 import today.ihelio.paxos.utility.PaxosServerUtil;
 import today.ihelio.paxoscomponents.HeartbeatRequest;
@@ -24,24 +25,23 @@ import static java.util.concurrent.TimeUnit.SECONDS;
 public class PaxosHost {
     private static final Logger logger = LoggerFactory.getLogger(PaxosHost.class);
     private final PaxosServer paxosServer;
-    private final int port;
+    private final AbstractHost localHost;
     private final Server server;
     private final ConcurrentHashMap<Integer, ManagedChannel> channelForPeers;
     private final ConcurrentHashMap<Integer, PaxosServerServiceGrpc.PaxosServerServiceBlockingStub> blockingStubForPeers;
 //    private final PaxosServerServiceGrpc.PaxosServerServiceStub asyncStub;
     private final ExecutorService pool = Executors.newCachedThreadPool();
     private final String HOST = "0.0.0.0";
-    @Inject
     private final HostPorts hostPorts;
-
-    public PaxosHost (int port, HostPorts hostPorts) {
-        this.port = port;
-        this.paxosServer = new PaxosServer((int) PaxosServerUtil.getProcessID(), hostPorts);
-        this.server = ServerBuilder.forPort(port).addService(new PaxosService(paxosServer)).build();
+    @Inject
+    public PaxosHost (AbstractHost localHost, HostPorts hostPorts, PaxosServer paxosServer, LeaderElectionTask leaderElectionTask) {
+        this.localHost = localHost;
+        this.paxosServer = paxosServer;
+        this.server = ServerBuilder.forPort(localHost.getPort()).addService(new PaxosService(paxosServer, leaderElectionTask)).build();
         this.channelForPeers = new ConcurrentHashMap<>();
         this.blockingStubForPeers = new ConcurrentHashMap<>();
         for (int portID: hostPorts.ports()) {
-            if (portID == port) {
+            if (portID == localHost.getPort()) {
                 continue;
             }
             this.channelForPeers.putIfAbsent(portID, ManagedChannelBuilder.forAddress(HOST, portID).usePlaintext().build());
@@ -49,20 +49,11 @@ public class PaxosHost {
         }
         this.hostPorts = hostPorts;
     }
-    public PaxosHost (PaxosServer paxosServer, int port, Server server, ConcurrentHashMap<Integer, ManagedChannel> channelForPeers,
-                      ConcurrentHashMap<Integer, PaxosServerServiceGrpc.PaxosServerServiceBlockingStub> blockingStubForPeers, HostPorts hostPorts) {
-        this.paxosServer = paxosServer;
-        this.port = port;
-        this.server = server;
-        this.channelForPeers = channelForPeers;
-        this.blockingStubForPeers = blockingStubForPeers;
-        this.hostPorts = hostPorts;
-    }
     
     /** Start serving requests. */
     public void start() throws IOException {
         server.start();
-        logger.info("Server started, listening on " + port);
+        logger.info("Server started, listening on " + localHost.getPort());
         Runtime.getRuntime().addShutdownHook(new Thread() {
             @Override
             public void run() {
@@ -86,7 +77,7 @@ public class PaxosHost {
                         throw new RuntimeException(e);
                     }
                     for (int peerPort: hostPorts.ports()) {
-                        if (peerPort == port) {
+                        if (peerPort == localHost.getPort()) {
                             continue;
                         }
                         HeartbeatRequest request = HeartbeatRequest.newBuilder().setHostId(paxosServer.getHostID()).build();

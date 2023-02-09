@@ -1,6 +1,8 @@
 package today.ihelio.paxos;
 
 import io.grpc.stub.StreamObserver;
+import javax.inject.Inject;
+import today.ihelio.paxos.utility.Leader;
 import today.ihelio.paxoscomponents.AcceptRequest;
 import today.ihelio.paxoscomponents.AcceptorResponse;
 import today.ihelio.paxoscomponents.PrepareRequest;
@@ -9,10 +11,11 @@ import today.ihelio.paxoscomponents.PrepareResponse;
 public class PaxosService extends today.ihelio.paxoscomponents.PaxosServerServiceGrpc.PaxosServerServiceImplBase {
 	private final PaxosServer paxosServer;
 	private final LeaderElectionTask leaderElectionTask;
-	
-	public PaxosService (PaxosServer paxosServer) {
+
+	@Inject
+	public PaxosService (PaxosServer paxosServer, LeaderElectionTask leaderElectionTask) {
 		this.paxosServer = paxosServer;
-		this.leaderElectionTask = new LeaderElectionTask(paxosServer, paxosServer.getHostID());
+		this.leaderElectionTask = leaderElectionTask;
 	}
 	
 	@Override
@@ -37,7 +40,8 @@ public class PaxosService extends today.ihelio.paxoscomponents.PaxosServerServic
 	@Override
 	public void sendHeartBeat (today.ihelio.paxoscomponents.HeartbeatRequest request, StreamObserver<today.ihelio.paxoscomponents.HeartbeatResponse> responseObserver) {
 		int requestHostId = Integer.valueOf(request.getHostId());
-		leaderElectionTask.processHeartbeat(requestHostId);
+		int requestHostPort = Integer.valueOf(request.getPort());
+		leaderElectionTask.processHeartbeat(new Leader(requestHostId, requestHostPort));
 		responseObserver.onNext(today.ihelio.paxoscomponents.HeartbeatResponse.newBuilder().setReceived(true).build());
 		responseObserver.onCompleted();
 	}

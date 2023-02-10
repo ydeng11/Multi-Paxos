@@ -39,7 +39,7 @@ public class PaxosServer {
 	private final AtomicReference<Integer> proposal = new AtomicReference<Integer>();
 
 	@Inject
-	public PaxosServer(@Named("LoaclHost") AbstractHost host, HostPorts hostPorts, Provider<Leader> leader) {
+	public PaxosServer(@Named("LocalHost") AbstractHost host, HostPorts hostPorts, Provider<Leader> leader) {
 		this.host = host;
 		this.leader = leader;
 		firstUnchosenIndex.set(0);

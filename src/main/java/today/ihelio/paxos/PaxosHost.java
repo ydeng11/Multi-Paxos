@@ -9,7 +9,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import today.ihelio.paxos.utility.AbstractHost;
 import today.ihelio.paxos.utility.HostPorts;
-import today.ihelio.paxos.utility.PaxosServerUtil;
 import today.ihelio.paxoscomponents.HeartbeatRequest;
 import today.ihelio.paxoscomponents.HeartbeatResponse;
 import today.ihelio.paxoscomponents.PaxosServerServiceGrpc;
@@ -34,10 +33,11 @@ public class PaxosHost {
     private final String HOST = "0.0.0.0";
     private final HostPorts hostPorts;
     @Inject
-    public PaxosHost (AbstractHost localHost, HostPorts hostPorts, PaxosServer paxosServer, LeaderElectionTask leaderElectionTask) {
+    public PaxosHost (AbstractHost localHost, HostPorts hostPorts, PaxosServer paxosServer, LeaderProvider leaderProvider) {
         this.localHost = localHost;
         this.paxosServer = paxosServer;
-        this.server = ServerBuilder.forPort(localHost.getPort()).addService(new PaxosService(paxosServer, leaderElectionTask)).build();
+        this.server = ServerBuilder.forPort(localHost.getPort()).addService(new PaxosService(paxosServer,
+            leaderProvider)).build();
         this.channelForPeers = new ConcurrentHashMap<>();
         this.blockingStubForPeers = new ConcurrentHashMap<>();
         for (int portID: hostPorts.ports()) {

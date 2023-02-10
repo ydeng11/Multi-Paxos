@@ -2,7 +2,6 @@ package today.ihelio.paxos;
 
 
 import com.google.common.base.Stopwatch;
-import java.util.Comparator;
 import java.util.TreeSet;
 import javax.inject.Provider;
 import javax.inject.Singleton;
@@ -11,24 +10,24 @@ import org.slf4j.LoggerFactory;
 
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
-import today.ihelio.paxos.common.LifeCycleListener;
 import today.ihelio.paxos.utility.AbstractHost;
 import today.ihelio.paxos.utility.Leader;
 
 @Singleton
-public class LeaderElectionTask implements Provider<Leader> {
-	private final Logger logger = LoggerFactory.getLogger(LeaderElectionTask.class);
+public class LeaderProvider implements Provider<Leader> {
+	private final Logger logger = LoggerFactory.getLogger(LeaderProvider.class);
 	private final Stopwatch stopwatch = Stopwatch.createUnstarted();
 	private final TreeSet<AbstractHost> serverSet = new TreeSet<>((AbstractHost o1, AbstractHost o2) -> o1.getHostID() - o2.getHostID());
 	private final AtomicReference<Long> lastSeenTime = new AtomicReference<>();
 	private final AtomicReference<Leader> leader;
 	private final AbstractHost localHost;
 
-	public LeaderElectionTask (AbstractHost host) {
+	public LeaderProvider(AbstractHost host) {
 		this.localHost = host;
 		this.stopwatch.start();
 		this.lastSeenTime.set(System.currentTimeMillis());
 		this.leader = new AtomicReference<>(Leader.of(host));
+		this.serverSet.add(host);
 	}
 
 	public Leader getLeader() {
@@ -45,7 +44,7 @@ public class LeaderElectionTask implements Provider<Leader> {
 		if (serverSet.last().equals(host)) {
 			lastSeenTime.getAndSet(System.currentTimeMillis());
 		}
-		if (System.currentTimeMillis() - lastSeenTime.get() > 2000) {
+		if (System.currentTimeMillis() - lastSeenTime.get() > 2000 && !serverSet.last().equals(this.localHost)) {
 			serverSet.pollLast();
 			lastSeenTime.getAndSet(System.currentTimeMillis());
 		}
@@ -58,8 +57,7 @@ public class LeaderElectionTask implements Provider<Leader> {
 			return v;
 		}
 		);
-//		update leader ID when a new leader is found, and it is the leader
-
+		logger.info(this.toString());
 	}
 	
 	private void restartStopwatch() {

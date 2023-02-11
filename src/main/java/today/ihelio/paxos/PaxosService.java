@@ -40,8 +40,9 @@ public class PaxosService extends today.ihelio.paxoscomponents.PaxosServerServic
 	@Override
 	public void sendHeartBeat (today.ihelio.paxoscomponents.HeartbeatRequest request, StreamObserver<today.ihelio.paxoscomponents.HeartbeatResponse> responseObserver) {
 		int requestHostId = Integer.valueOf(request.getHostId());
+		String requestAddress = request.getAddress();
 		int requestHostPort = Integer.valueOf(request.getPort());
-		leaderProvider.processHeartbeat(new Leader(requestHostId, requestHostPort));
+		leaderProvider.processHeartbeat(new Leader(requestHostId, requestAddress, requestHostPort));
 		responseObserver.onNext(today.ihelio.paxoscomponents.HeartbeatResponse.newBuilder().setReceived(true).build());
 		responseObserver.onCompleted();
 	}

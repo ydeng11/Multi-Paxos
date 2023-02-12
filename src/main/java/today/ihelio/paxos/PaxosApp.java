@@ -4,19 +4,18 @@ import com.google.inject.Guice;
 import com.google.inject.Injector;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import today.ihelio.paxos.utility.HostPorts;
-
-import static com.google.common.base.Preconditions.checkNotNull;
+import today.ihelio.paxos.utility.AbstractHost;
 
 public class PaxosApp {
 	private static final Logger logger = LoggerFactory.getLogger(PaxosApp.class);
 	public static void main(String[] args) throws Exception {
-		Injector injector = Guice.createInjector(new PaxosServiceModule());
-		HostPorts hostPorts = injector.getInstance(HostPorts.class);
-		checkNotNull(hostPorts);
+		long hostId = ProcessHandle.current().pid();
 		int port = Integer.valueOf(args[0]);
-		PaxosHost host = new PaxosHost(port, hostPorts);
-		host.start();
-		host.blockUntilShutdown();
+		String address = "0.0.0.0";
+		AbstractHost localHost = new AbstractHost((int) hostId, address, port);
+		Injector injector = Guice.createInjector(new PaxosServiceModule(localHost));
+		PaxosHost paxosHost = injector.getInstance(PaxosHost.class);
+		paxosHost.start();
+		paxosHost.blockUntilShutdown();
 	}
 }

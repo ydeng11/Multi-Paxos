@@ -6,25 +6,31 @@ import java.io.IOException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import javax.inject.Inject;
+import javax.inject.Named;
+import javax.inject.Singleton;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import today.ihelio.paxos.task.LeaderElectionTask;
 import today.ihelio.paxos.utility.AbstractHost;
 
 import static java.util.concurrent.TimeUnit.SECONDS;
 
+@Singleton
 public class PaxosHost {
     private static final Logger logger = LoggerFactory.getLogger(PaxosHost.class);
     private final PaxosServer paxosServer;
     private final AbstractHost localHost;
     private final Server server;
     private final ExecutorService pool = Executors.newCachedThreadPool();
+    private final LeaderElectionTask leaderElectionTask;
     @Inject
-    public PaxosHost (AbstractHost localHost, PaxosServer paxosServer,
-        LeaderProvider leaderProvider) {
+    public PaxosHost (@Named("LocalHost") AbstractHost localHost, PaxosServer paxosServer,
+        LeaderProvider leaderProvider, LeaderElectionTask leaderElectionTask) {
         this.localHost = localHost;
         this.paxosServer = paxosServer;
         this.server = ServerBuilder.forPort(localHost.getPort()).addService(new PaxosService(paxosServer,
             leaderProvider)).build();
+        this.leaderElectionTask = leaderElectionTask;
     }
     
     /** Start serving requests. */
@@ -44,11 +50,7 @@ public class PaxosHost {
                 System.err.println("*** server shut down");
             }
         });
-        pool.submit(new Runnable() {
-            @Override
-            public void run () {
-                }
-            });
+        pool.submit(leaderElectionTask);
     }
     
     /** Stop serving requests and shutdown resources. */

@@ -11,7 +11,7 @@ import javax.inject.Inject;
 import javax.inject.Provider;
 import javax.inject.Singleton;
 import today.ihelio.paxos.utility.AbstractHost;
-import today.ihelio.paxos.utility.HostPorts;
+import today.ihelio.paxos.utility.Hosts;
 import today.ihelio.paxos.utility.Leader;
 import today.ihelio.paxoscomponents.AcceptRequest;
 import today.ihelio.paxoscomponents.AcceptorResponse;
@@ -28,7 +28,7 @@ public class PaxosServer {
 	private final AtomicReference<Integer> firstUnchosenIndex = new AtomicReference<>();
 	private final AtomicReference<Boolean> noMoreUnaccepted = new AtomicReference<>();
 	private final Queue<DataInsertionRequest> eventsQueue = new ConcurrentLinkedQueue<>();
-	private final HostPorts hostPorts;
+	private final Hosts hosts;
 	private final Map<Integer, Boolean> unacceptedStatusPeers = new ConcurrentHashMap<>();
 	private final AtomicInteger acceptedNotChosen = new AtomicInteger(0);
 
@@ -39,13 +39,13 @@ public class PaxosServer {
 	private final AtomicReference<Integer> proposal = new AtomicReference<Integer>();
 
 	@Inject
-	public PaxosServer(@Named("LocalHost") AbstractHost host, HostPorts hostPorts, Provider<Leader> leader) {
+	public PaxosServer(@Named("LocalHost") AbstractHost host, Hosts hosts, Provider<Leader> leader) {
 		this.host = host;
 		this.leader = leader;
 		firstUnchosenIndex.set(0);
 		noMoreUnaccepted.set(true);
 		proposal.set(0);
-		this.hostPorts = hostPorts;
+		this.hosts = hosts;
 	}
 	
 	public boolean isLeader() {

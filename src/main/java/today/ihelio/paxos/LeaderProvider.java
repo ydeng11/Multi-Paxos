@@ -50,7 +50,7 @@ public class LeaderProvider implements Provider<Leader> {
 		}
 		AbstractHost leaderHost = serverSet.last();
 		this.leader.getAndUpdate((v) -> {
-			if (v.getHostID() != leaderHost.getHostID() && stopwatch.elapsed(TimeUnit.MILLISECONDS) > 500) {
+			if (v.getHostID() != leaderHost.getHostID() && stopwatch.elapsed(TimeUnit.MILLISECONDS) > 1000) {
 				restartStopwatch();
 				return Leader.of(leaderHost);
 			}

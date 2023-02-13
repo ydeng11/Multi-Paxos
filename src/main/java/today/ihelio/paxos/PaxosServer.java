@@ -7,6 +7,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import javax.annotation.Nullable;
 import javax.inject.Inject;
 import javax.inject.Provider;
 import javax.inject.Singleton;
@@ -63,8 +64,19 @@ public class PaxosServer {
 		eventsQueue.add(dataInsertionRequest);
 	}
 
+	@Nullable
 	public DataInsertionRequest getClientRequest() {
 		return eventsQueue.poll();
+	}
+
+	public int getFirstUnchosenIndex() {
+		return firstUnchosenIndex.get();
+	}
+
+
+
+	public boolean hasRequest() {
+		return !eventsQueue.isEmpty();
 	}
 
 	/**

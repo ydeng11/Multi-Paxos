@@ -7,6 +7,7 @@ import today.ihelio.paxoscomponents.AcceptRequest;
 import today.ihelio.paxoscomponents.AcceptorResponse;
 import today.ihelio.paxoscomponents.PrepareRequest;
 import today.ihelio.paxoscomponents.PrepareResponse;
+import today.ihelio.paxoscomponents.Proposal;
 
 public class PaxosService extends today.ihelio.paxoscomponents.PaxosServerServiceGrpc.PaxosServerServiceImplBase {
 	private final PaxosServer paxosServer;
@@ -21,8 +22,8 @@ public class PaxosService extends today.ihelio.paxoscomponents.PaxosServerServic
 	@Override
 	public void makeProposalMsg (PrepareRequest request, StreamObserver<PrepareResponse> responseObserver) {
 		today.ihelio.paxoscomponents.Proposal proposal = request.getProposal();
-		//paxosServer.processProposal(proposal);
-		PrepareResponse prepareResponse = PrepareResponse.newBuilder().setProposal(proposal).build();
+		Proposal responseProposal = paxosServer.processProposal(proposal);
+		PrepareResponse prepareResponse = PrepareResponse.newBuilder().setProposal(responseProposal).build();
 		responseObserver.onNext(prepareResponse);
 		responseObserver.onCompleted();
 	}

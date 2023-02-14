@@ -19,7 +19,7 @@ message PrepareResponse {
 }
 
 message AcceptRequest {
-  int32 proposal = 1;
+  int32 proposalNumber = 1;
   int32 index = 2;
   string value = 3;
   int32 firstUnchosenIndex = 4;

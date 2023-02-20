@@ -8,7 +8,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
-import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutionException;
@@ -17,6 +16,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.AtomicReferenceArray;
 import javax.annotation.Nullable;
 import javax.inject.Inject;
 import javax.inject.Provider;
@@ -30,6 +30,7 @@ import today.ihelio.paxos.utility.StubFactory;
 import today.ihelio.paxoscomponents.AcceptRequest;
 import today.ihelio.paxoscomponents.AcceptorResponse;
 import today.ihelio.paxoscomponents.DataInsertionRequest;
+import today.ihelio.paxoscomponents.DataInsertionResponse;
 import today.ihelio.paxoscomponents.PrepareRequest;
 import today.ihelio.paxoscomponents.PrepareResponse;
 import today.ihelio.paxoscomponents.Proposal;
@@ -42,9 +43,9 @@ public class PaxosServer {
 	private static final Logger logger = LoggerFactory.getLogger(PaxosServer.class);
 	private final Provider<Leader> leader;
 	private final AbstractHost localHost;
-	private final boolean[] choosenArray = new boolean[2000];
-	private final String[] valueArray = new String[2000];
-	private final AtomicReference<Integer> firstUnchosenIndex = new AtomicReference<>();
+	private final AtomicReferenceArray<Boolean> choosenArray;
+	private final AtomicReferenceArray<String> acceptedValueArray;
+	private final AtomicInteger firstUnchosenIndex = new AtomicInteger();
 	private final AtomicReference<Boolean> noMoreUnaccepted = new AtomicReference<>();
 	private final Queue<DataInsertionRequest> eventsQueue = new ConcurrentLinkedQueue<>();
 	private final Hosts hosts;
@@ -53,15 +54,7 @@ public class PaxosServer {
 	private final AtomicInteger localProposalNumber;
 	private final AtomicInteger proposalQuorumCount;
 	private final Map<Integer, Boolean> unacceptedStatusPeers = new ConcurrentHashMap<>();
-	private final AtomicInteger unacceptedAcceptorCount;
-
 	private final AtomicInteger acceptedNotChosen = new AtomicInteger(0);
-
-	/**
-	 * Set a global proposal since we should have only one leader thus eventually
-	 * the proposal should be consistent across the servers
-	 */
-	private final AtomicReference<Integer> proposal = new AtomicReference<Integer>();
 
 	@Inject
 	public PaxosServer(@Named("LocalHost") AbstractHost host, Hosts hosts,
@@ -72,12 +65,11 @@ public class PaxosServer {
 		this.noMoreUnaccepted.set(true);
 		this.localProposalNumber = new AtomicInteger(0);
 		this.proposalQuorumCount = new AtomicInteger(0);
-		this.proposal.set(0);
 		this.hosts = hosts;
 		this.stubFactory = stubFactory;
 		this.executorService = Executors.newSingleThreadExecutor();
-		this.unacceptedAcceptorCount = new AtomicInteger(0);
-
+		this.acceptedValueArray = new AtomicReferenceArray<>(2000);
+		this.choosenArray = new AtomicReferenceArray<>(2000);
 	}
 	
 	public boolean isLeader() {
@@ -97,6 +89,11 @@ public class PaxosServer {
 
 	@Nullable
 	public DataInsertionRequest getClientRequest() {
+		return eventsQueue.peek();
+	}
+
+	@Nullable
+	public DataInsertionRequest pollClientRequest() {
 		return eventsQueue.poll();
 	}
 
@@ -108,7 +105,7 @@ public class PaxosServer {
 		return !eventsQueue.isEmpty();
 	}
 
-	public Set<Future<PrepareResponse>> sendProposalMsg(Proposal proposal) {
+	public Set<Future<PrepareResponse>> makeProposalMsg(Proposal proposal) {
 		Set<Future<PrepareResponse>> taskSet = new HashSet<>();
 
 		PrepareRequest request = PrepareRequest.newBuilder().setProposal(proposal).build();
@@ -116,8 +113,7 @@ public class PaxosServer {
 			if (peer.equals(localHost)) {
 				continue;
 			}
-			Future<PrepareResponse> futureResponse = executorService.submit(new Callable<PrepareResponse>() {
-				@Override public PrepareResponse call() throws Exception {
+			Future<PrepareResponse> futureResponse = executorService.submit(() -> {
 					try {
 						PrepareResponse response = stubFactory.getBlockingStub(peer)
 								.withDeadlineAfter(5, SECONDS)
@@ -127,14 +123,31 @@ public class PaxosServer {
 						logger.error("request failed " + e.getMessage());
 						return PrepareResponse.getDefaultInstance();
 					}
-				}
-			});
+				});
 			taskSet.add(futureResponse);
 		}
 		return taskSet;
 	}
 
-	private Proposal processProposalResponse(Set<Future<PrepareResponse>> taskSet, Proposal proposalMsg) {
+	/**
+	 * When receiving proposal, we use a global proposal for the whole log to block old proposals
+	 * But each proposal should still have one value for a particular place
+	 */
+	public Proposal processProposalRequest(Proposal proposal) {
+		Proposal.Builder proposalBuilder = proposal.toBuilder();
+		if (proposal.getProposalNumber() < this.localProposalNumber.get()) {
+			proposalBuilder.setProposalNumber(this.localProposalNumber.get());
+		} else {
+			this.localProposalNumber.getAndSet(proposal.getProposalNumber());
+		}
+		// valueArray is accepted value
+		if (acceptedValueArray.get(proposal.getIndex()) != null) {
+			proposalBuilder.setValue(acceptedValueArray.get(proposal.getIndex()));
+		}
+		return proposalBuilder.build();
+	}
+
+	public Proposal processProposalResponse(Set<Future<PrepareResponse>> taskSet, Proposal proposalMsg) {
 		List<Proposal> responseProposalsFromAcceptor = taskSet.stream().map((v) -> {
 			try {
 				return v.get().getProposal();
@@ -145,18 +158,23 @@ public class PaxosServer {
 			}
 		}).collect(
 				ImmutableList.toImmutableList());
+
 		int uniqueValues = (int) responseProposalsFromAcceptor.stream()
 				.map((v) -> v.getValue()).collect(ImmutableSet.toImmutableSet())
 				.stream().count();
+
 		if (uniqueValues > 2) {
 			throw new RuntimeException("received more than 2 different accepted values from "
 					+ "acceptors");
 		}
 
-		proposalQuorumCount.getAndSet(0);
+		int quorumCount = 0;
+		// increment quorum if the returned proposal is as the same as the proposal sent
+		// otherwise we should resend proposal with higher proposal number
+		// or replace the value from the accepted value in the acceptors
 		for (Proposal proposal : responseProposalsFromAcceptor) {
 			if (proposal.equals(proposalMsg)) {
-				proposalQuorumCount.getAndIncrement();
+				quorumCount += 1;
 			} else {
 				if (proposal.getProposalNumber() > proposalMsg.getProposalNumber()) {
 					localProposalNumber.getAndAdd(hosts.hosts().size());
@@ -170,7 +188,10 @@ public class PaxosServer {
 				}
 			}
 		}
-		if (proposalQuorumCount.get() > hosts.hosts().size() / 2 + 1) {
+		// if the quorum is larger than the half size, we can return the proposal for next step
+		// otherwise we need increment proposal number and retry
+		// it determines if we should go ahead sending acceptRequest
+		if (quorumCount > hosts.hosts().size() / 2 + 1) {
 			return proposalMsg;
 		} else {
 			localProposalNumber.getAndIncrement();
@@ -178,22 +199,7 @@ public class PaxosServer {
 		}
 	}
 
-	/**
-	 * When receiving proposal, we use a global proposal for the whole log to block old proposals
-	 * But each proposal should still have one value for a particular place
-	 */
-	public Proposal processProposalRequest(Proposal proposal) {
-		Proposal.Builder proposalBuilder = proposal.toBuilder();
-		if (proposal.getProposalNumber() < this.proposal.get()) {
-			proposalBuilder.setProposalNumber(this.proposal.get());
-		}
-		if (valueArray[proposal.getIndex()] != null) {
-			proposalBuilder.setValue(valueArray[proposal.getIndex()]);
-		}
-		return proposalBuilder.build();
-	}
-
-	private Set<Future<AcceptorResponse>> sendAcceptMsg(Proposal proposal) {
+	public Set<Future<AcceptorResponse>> sendAcceptMsg(Proposal proposal) {
 		Set<Future<AcceptorResponse>> taskSet = new HashSet<>();
 
 		AcceptRequest request = AcceptRequest.newBuilder().setProposalNumber(proposal.getProposalNumber())
@@ -201,12 +207,12 @@ public class PaxosServer {
 				.setValue(proposal.getValue())
 				.setFirstUnchosenIndex(getFirstUnchosenIndex())
 				.build();
+
 		for (AbstractHost peer: hosts.hosts()) {
 			if (peer.equals(localHost)) {
 				continue;
 			}
-			Future<AcceptorResponse> futureResponse = executorService.submit(new Callable<AcceptorResponse>() {
-				@Override public AcceptorResponse call() throws Exception {
+			Future<AcceptorResponse> futureResponse = executorService.submit(() -> {
 					try {
 						AcceptorResponse response = stubFactory.getBlockingStub(peer)
 								.withDeadlineAfter(5, SECONDS)
@@ -216,15 +222,34 @@ public class PaxosServer {
 						logger.error("request failed " + e.getMessage());
 						return AcceptorResponse.getDefaultInstance();
 					}
-				}
-			});
+				});
 			taskSet.add(futureResponse);
 		}
 		return taskSet;
 	}
 
-	private void processAcceptResponse() {
-
+	public boolean processAcceptMsgResponse(Set<Future<AcceptorResponse>> taskSet) {
+		for (Future<AcceptorResponse> acceptorResponseFuture : taskSet) {
+			try {
+				AcceptorResponse acceptorResponse = acceptorResponseFuture.get();
+				unacceptedStatusPeers.put(acceptorResponse.getHostId(), acceptorResponse.getNoUnacceptedValue());
+				// should start from proposal again if the response is false
+				if (acceptorResponse != null && acceptorResponse.getResponseStatus() != true) {
+					localProposalNumber.getAndUpdate((v) -> {
+						if (v < acceptorResponse.getHighestProposal()) {
+							return acceptorResponse.getHighestProposal() + 1;
+						}
+						return v;
+					});
+					return false;
+				}
+			} catch (InterruptedException e) {
+				throw new RuntimeException(e);
+			} catch (ExecutionException e) {
+				throw new RuntimeException(e);
+			}
+		}
+		return true;
 	}
 
 	/**
@@ -239,34 +264,34 @@ public class PaxosServer {
 	 * @param acceptRequest
 	 * @return
 	 */
-	public AcceptorResponse processAcceptorRequest(AcceptRequest acceptRequest) {
-		if (acceptRequest.getProposalNumber() != proposal.get()) {
-			return AcceptorResponse.newBuilder().setHighestProposal(proposal.get())
+	public AcceptorResponse processAcceptRequest(AcceptRequest acceptRequest) {
+		if (acceptRequest.getProposalNumber() != localProposalNumber.get()) {
+			return AcceptorResponse.newBuilder().setHighestProposal(localProposalNumber.get())
 					.setFirstUnchosenIndex(firstUnchosenIndex.get())
 					.setNoUnacceptedValue(noMoreUnaccepted.get())
 					.setResponseStatus(false)
 					.build();
 		}
 		for (int i = 0; i < acceptRequest.getFirstUnchosenIndex(); i++) {
-			if (choosenArray[i]) {continue;}
-			choosenArray[i] = true;
+			if (choosenArray.get(i) == true) {continue;}
+			choosenArray.set(i, true);
 			acceptedNotChosen.getAndDecrement();
 		}
-		valueArray[acceptRequest.getIndex()] = acceptRequest.getValue();
+		acceptedValueArray.set(acceptRequest.getIndex(), acceptRequest.getValue());
 		acceptedNotChosen.getAndIncrement();
-		firstUnchosenIndex.getAndSet(acceptRequest.getIndex());
+		moveToNextUnchosenIndex();
 
-		return AcceptorResponse.newBuilder().setHighestProposal(proposal.get())
+		return AcceptorResponse.newBuilder().setHighestProposal(localProposalNumber.get())
 				.setFirstUnchosenIndex(firstUnchosenIndex.get())
 				.setNoUnacceptedValue(acceptedNotChosen.get() == 0)
 				.setResponseStatus(true).build();
 	}
 
 	public AcceptorResponse processSuccessRequest(SuccessRequest successRequest) {
-		choosenArray[successRequest.getIndex()] = true;
+		choosenArray.set(successRequest.getIndex(), true);
 		acceptedNotChosen.getAndDecrement();
-		firstUnchosenIndex.getAndSet(successRequest.getIndex() + 1);
-		return AcceptorResponse.newBuilder().setHighestProposal(proposal.get())
+		moveToNextUnchosenIndex();
+		return AcceptorResponse.newBuilder().setHighestProposal(localProposalNumber.get())
 				.setFirstUnchosenIndex(firstUnchosenIndex.get())
 				.setNoUnacceptedValue(acceptedNotChosen.get() == 0)
 				.setResponseStatus(true).build();
@@ -277,10 +302,51 @@ public class PaxosServer {
 	}
 
 	private long valueArrayHash() {
-		return this.valueArray.hashCode();
+		return this.acceptedValueArray.hashCode();
+	}
+
+	private void moveToNextUnchosenIndex() {
+		while (choosenArray.get(firstUnchosenIndex.get())) {
+			firstUnchosenIndex.getAndIncrement();
+		}
+	}
+
+	public boolean isMostUnaccepted() {
+		return unacceptedStatusPeers.values().stream().filter(v -> v == true).count() > hosts.hosts().size() / 2 + 1;
 	}
 
 	public int getLocalProposalNumber() {
 		return localProposalNumber.get();
 	}
+
+	public void setChoosen(int index, String value) {
+		choosenArray.set(index, true);
+		acceptedValueArray.set(index, value);
+	}
+
+	public Proposal createProposal() {
+		Proposal.Builder proposalBuilder = Proposal.newBuilder()
+				.setProposalNumber(localProposalNumber.get())
+				.setIndex(firstUnchosenIndex.get())
+				.setHostID(localHost.getHostID());
+		if (acceptedValueArray.get(firstUnchosenIndex.get()) != null) {
+			proposalBuilder.setValue(acceptedValueArray.get(firstUnchosenIndex.get()));
+		} else {
+			proposalBuilder.setValue(getClientRequest().getValue());
+		}
+		return proposalBuilder.build();
+	}
+
+	public DataInsertionResponse redirectRequest(DataInsertionRequest request) {
+		logger.info(localHost.getHostID() + " redirecting " + request.toString() + " to leader - " + leader.get());
+		DataInsertionResponse response = stubFactory.getBlockingStub(leader.get())
+				.withDeadlineAfter(5, SECONDS)
+				.createNewData(request);
+		return response;
+	}
+
+	public void shutDownManagedChannel() {
+		stubFactory.shutDownChannel();
+	}
+
 }

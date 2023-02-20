@@ -2,7 +2,7 @@ package today.ihelio.paxos;
 
 import com.google.inject.AbstractModule;
 import com.google.inject.name.Names;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.HashMap;
 import today.ihelio.paxos.config.ConfigModule;
 import today.ihelio.paxos.utility.AbstractHost;
 import today.ihelio.paxos.utility.Leader;
@@ -20,6 +20,6 @@ public class PaxosServiceModule extends AbstractModule {
 		bind(LeaderProvider.class).toInstance(new LeaderProvider(host));
 		bind(Leader.class).toProvider(LeaderProvider.class);
 		bind(AbstractHost.class).annotatedWith(Names.named("LocalHost")).toInstance(host);
-		bind(StubFactory.class).toInstance(new StubFactory(new ConcurrentHashMap<>()));
+		bind(StubFactory.class).toInstance(new StubFactory(new HashMap<>(), new HashMap<>()));
 	}
 }

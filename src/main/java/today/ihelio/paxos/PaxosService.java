@@ -4,7 +4,7 @@ import io.grpc.stub.StreamObserver;
 import javax.inject.Inject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import today.ihelio.paxos.utility.Leader;
+import today.ihelio.paxos.utility.AbstractHost;
 import today.ihelio.paxoscomponents.AcceptRequest;
 import today.ihelio.paxoscomponents.AcceptorResponse;
 import today.ihelio.paxoscomponents.DataInsertionRequest;
@@ -33,10 +33,10 @@ public class PaxosService extends today.ihelio.paxoscomponents.PaxosServerServic
 				.setId(request.getId())
 				.setKey(request.getKey())
 				.setValue(request.getValue());
-		logger.info("receive request");
 		if (paxosServer.isLeader()) {
 			paxosServer.addClientRequest(request);
 			responseBuilder.setStatus("processing");
+			logger.info("add new client request " + request + "and now has " + paxosServer.getRequestSize() + " requests.");
 			responseObserver.onNext(responseBuilder.build());
 		} else {
 			responseObserver.onNext(paxosServer.redirectRequest(request));
@@ -72,7 +72,7 @@ public class PaxosService extends today.ihelio.paxoscomponents.PaxosServerServic
 		int requestHostId = Integer.valueOf(request.getHostId());
 		String requestAddress = request.getAddress();
 		int requestHostPort = Integer.valueOf(request.getPort());
-		leaderProvider.processHeartbeat(new Leader(requestHostId, requestAddress, requestHostPort));
+		leaderProvider.processHeartbeat(new AbstractHost(requestHostId, requestAddress, requestHostPort));
 		responseObserver.onNext(today.ihelio.paxoscomponents.HeartbeatResponse.newBuilder().setReceived(true).build());
 		responseObserver.onCompleted();
 	}

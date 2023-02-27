@@ -49,4 +49,8 @@ public class AbstractHost {
     return this.address.equals(((AbstractHost)obj).getAddress()) &&
         this.port == (((AbstractHost)obj).getPort());
   }
+
+  @Override public String toString() {
+    return "hostID: " + hostID + " address: " + address + " port: " + port;
+  }
 }

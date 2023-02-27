@@ -21,11 +21,12 @@ import javax.annotation.Nullable;
 import javax.inject.Inject;
 import javax.inject.Provider;
 import javax.inject.Singleton;
+import org.apache.commons.lang3.BooleanUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import today.ihelio.paxos.annotations.Leader;
 import today.ihelio.paxos.utility.AbstractHost;
 import today.ihelio.paxos.utility.Hosts;
-import today.ihelio.paxos.utility.Leader;
 import today.ihelio.paxos.utility.StubFactory;
 import today.ihelio.paxoscomponents.AcceptRequest;
 import today.ihelio.paxoscomponents.AcceptorResponse;
@@ -41,7 +42,7 @@ import static java.util.concurrent.TimeUnit.SECONDS;
 @Singleton
 public class PaxosServer {
 	private static final Logger logger = LoggerFactory.getLogger(PaxosServer.class);
-	private final Provider<Leader> leader;
+	private final Provider<AbstractHost> leader;
 	private final AbstractHost localHost;
 	private final AtomicReferenceArray<Boolean> choosenArray;
 	private final AtomicReferenceArray<String> acceptedValueArray;
@@ -52,19 +53,17 @@ public class PaxosServer {
 	private final ExecutorService executorService;
 	private final StubFactory stubFactory;
 	private final AtomicInteger localProposalNumber;
-	private final AtomicInteger proposalQuorumCount;
 	private final Map<Integer, Boolean> unacceptedStatusPeers = new ConcurrentHashMap<>();
 	private final AtomicInteger acceptedNotChosen = new AtomicInteger(0);
 
 	@Inject
 	public PaxosServer(@Named("LocalHost") AbstractHost host, Hosts hosts,
-			StubFactory stubFactory, Provider<Leader> leader) {
+			StubFactory stubFactory, @Leader Provider<AbstractHost> leader) {
 		this.localHost = host;
 		this.leader = leader;
 		this.firstUnchosenIndex.set(0);
 		this.noMoreUnaccepted.set(true);
 		this.localProposalNumber = new AtomicInteger(0);
-		this.proposalQuorumCount = new AtomicInteger(0);
 		this.hosts = hosts;
 		this.stubFactory = stubFactory;
 		this.executorService = Executors.newSingleThreadExecutor();
@@ -73,7 +72,7 @@ public class PaxosServer {
 	}
 	
 	public boolean isLeader() {
-		return leader.get().getHostID() == this.localHost.getHostID();
+		return getHostID() == getLeaderID();
 	}
 	
 	public int getHostID () {
@@ -102,7 +101,11 @@ public class PaxosServer {
 	}
 
 	public boolean hasRequest() {
-		return !eventsQueue.isEmpty();
+		return getRequestSize() > 0;
+	}
+
+	public int getRequestSize() {
+		return eventsQueue.size();
 	}
 
 	public Set<Future<PrepareResponse>> makeProposalMsg(Proposal proposal) {
@@ -191,7 +194,7 @@ public class PaxosServer {
 		// if the quorum is larger than the half size, we can return the proposal for next step
 		// otherwise we need increment proposal number and retry
 		// it determines if we should go ahead sending acceptRequest
-		if (quorumCount > hosts.hosts().size() / 2 + 1) {
+		if (quorumCount >= (hosts.hosts().size() - 1) / 2) {
 			return proposalMsg;
 		} else {
 			localProposalNumber.getAndIncrement();
@@ -298,7 +301,11 @@ public class PaxosServer {
 	}
 
 	public String toString() {
-		return String.valueOf(valueArrayHash());
+		int out = 0;
+		for (int i = 0; i < this.acceptedValueArray.length(); i++) {
+			out += Integer.valueOf(this.acceptedValueArray.get(i)) * BooleanUtils.toInteger(this.choosenArray.get(i));
+		}
+		return String.valueOf(out);
 	}
 
 	private long valueArrayHash() {
@@ -312,7 +319,7 @@ public class PaxosServer {
 	}
 
 	public boolean isMostUnaccepted() {
-		return unacceptedStatusPeers.values().stream().filter(v -> v == true).count() > hosts.hosts().size() / 2 + 1;
+		return unacceptedStatusPeers.values().stream().filter(v -> v == true).count() >= (hosts.hosts().size() - 1) / 2;
 	}
 
 	public int getLocalProposalNumber() {
@@ -332,21 +339,22 @@ public class PaxosServer {
 		if (acceptedValueArray.get(firstUnchosenIndex.get()) != null) {
 			proposalBuilder.setValue(acceptedValueArray.get(firstUnchosenIndex.get()));
 		} else {
-			proposalBuilder.setValue(getClientRequest().getValue());
+			proposalBuilder.setValue(pollClientRequest().getValue());
 		}
 		return proposalBuilder.build();
 	}
 
 	public DataInsertionResponse redirectRequest(DataInsertionRequest request) {
-		logger.info(localHost.getHostID() + " redirecting " + request.toString() + " to leader - " + leader.get());
-		DataInsertionResponse response = stubFactory.getBlockingStub(leader.get())
-				.withDeadlineAfter(5, SECONDS)
-				.createNewData(request);
-		return response;
+		logger.info(localHost + " redirecting " + request.toString() + " to leader - " + leader.get());
+		logger.info(String.valueOf("leader: " + leader.get() + " whether leader is found" + stubFactory.getBlockingStub(leader.get()) != null));
+		try {
+			DataInsertionResponse response = stubFactory.getBlockingStub(leader.get())
+					.withDeadlineAfter(5, SECONDS)
+					.createNewData(request);
+			return response;
+		} catch (Exception e) {
+			logger.info(String.valueOf("leader: " + leader.get() + " whether leader is found" + stubFactory.getBlockingStub(leader.get()) != null));
+			throw new RuntimeException(e);
+		}
 	}
-
-	public void shutDownManagedChannel() {
-		stubFactory.shutDownChannel();
-	}
-
 }

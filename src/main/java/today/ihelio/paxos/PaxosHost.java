@@ -11,6 +11,7 @@ import javax.inject.Singleton;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import today.ihelio.paxos.task.LeaderElectionTask;
+import today.ihelio.paxos.task.LogPersistentTask;
 import today.ihelio.paxos.task.PaxosConcensusTask;
 import today.ihelio.paxos.utility.AbstractHost;
 
@@ -22,21 +23,24 @@ public class PaxosHost {
     private final PaxosServer paxosServer;
     private final AbstractHost localHost;
     private final Server server;
-    private final ExecutorService pool = Executors.newCachedThreadPool();
+    private final ExecutorService pool = Executors.newFixedThreadPool(10);
     private final LeaderElectionTask leaderElectionTask;
     private final PaxosConcensusTask paxosConcensusTask;
+    private final LogPersistentTask logPersistentTask;
     @Inject
     public PaxosHost (@Named("LocalHost") AbstractHost localHost,
         PaxosServer paxosServer,
         LeaderProvider leaderProvider,
         LeaderElectionTask leaderElectionTask,
-        PaxosConcensusTask paxosConcensusTask) {
+        PaxosConcensusTask paxosConcensusTask,
+        LogPersistentTask logPersistentTask) {
         this.localHost = localHost;
         this.paxosServer = paxosServer;
         this.server = ServerBuilder.forPort(localHost.getPort()).addService(new PaxosService(paxosServer,
             leaderProvider)).build();
         this.leaderElectionTask = leaderElectionTask;
         this.paxosConcensusTask = paxosConcensusTask;
+        this.logPersistentTask = logPersistentTask;
     }
     
     /** Start serving requests. */
@@ -58,6 +62,7 @@ public class PaxosHost {
         });
         pool.submit(leaderElectionTask);
         pool.submit(paxosConcensusTask);
+        pool.submit(logPersistentTask);
     }
     
     /** Stop serving requests and shutdown resources. */

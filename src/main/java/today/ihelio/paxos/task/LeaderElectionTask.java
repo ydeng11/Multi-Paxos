@@ -33,7 +33,7 @@ public class LeaderElectionTask implements Runnable {
   @Override public void run() {
     while (true) {
       try {
-        Thread.sleep(500);
+        Thread.sleep(200);
       } catch (InterruptedException e) {
         throw new RuntimeException(e);
       }
@@ -41,11 +41,14 @@ public class LeaderElectionTask implements Runnable {
         if (peer.equals(localHost)) {
           continue;
         }
-        HeartbeatRequest request = HeartbeatRequest.newBuilder().setHostId(paxosServer.getHostID()).build();
+        HeartbeatRequest request = HeartbeatRequest.newBuilder()
+            .setHostId(localHost.getHostID())
+            .setAddress(localHost.getAddress())
+            .setPort(localHost.getPort())
+            .build();
         HeartbeatResponse response = HeartbeatResponse.getDefaultInstance();
         try {
           response = stubFactory.getBlockingStub(peer).withDeadlineAfter(5, SECONDS).sendHeartBeat(request);
-          logger.info(response.toString());
         } catch (Exception e) {
           logger.error("request failed " + e.getMessage());
         }

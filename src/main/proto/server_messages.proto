@@ -1,7 +1,8 @@
 syntax = "proto3";
-package paxos_server;
+package paxos;
 option java_multiple_files = true;
 option java_package = "today.ihelio.paxoscomponents";
+import "client_messages.proto";
 
 message Proposal {
   int32 proposalNumber = 1;
@@ -16,10 +17,11 @@ message PrepareRequest {
 
 message PrepareResponse {
   Proposal proposal = 1;
+  int32 hostId = 2;
 }
 
 message AcceptRequest {
-  int32 proposal = 1;
+  int32 proposalNumber = 1;
   int32 index = 2;
   string value = 3;
   int32 firstUnchosenIndex = 4;
@@ -35,6 +37,7 @@ message AcceptorResponse {
   bool noUnacceptedValue = 2;
   int32 highestProposal = 3;
   bool responseStatus = 4;
+  int32 hostId = 5;
 }
 
 message HeartbeatRequest {
@@ -52,4 +55,5 @@ service PaxosServerService {
   rpc MakeAcceptMsg(AcceptRequest) returns (AcceptorResponse) {};
   rpc MakeSuccessMsg(SuccessRequest) returns (AcceptorResponse) {};
   rpc SendHeartBeat(HeartbeatRequest) returns (HeartbeatResponse) {};
+  rpc CreateNewData(DataInsertionRequest) returns (DataInsertionResponse);
 }

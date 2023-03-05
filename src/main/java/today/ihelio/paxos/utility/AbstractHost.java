@@ -41,4 +41,16 @@ public class AbstractHost {
   public void setPort(int port) {
     this.port = port;
   }
+
+  @Override public boolean equals(Object obj) {
+    if (!(obj instanceof AbstractHost)) {
+      return false;
+    }
+    return this.address.equals(((AbstractHost)obj).getAddress()) &&
+        this.port == (((AbstractHost)obj).getPort());
+  }
+
+  @Override public String toString() {
+    return "hostID: " + hostID + " address: " + address + " port: " + port;
+  }
 }

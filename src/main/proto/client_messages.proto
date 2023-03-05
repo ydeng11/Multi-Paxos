@@ -1,5 +1,5 @@
 syntax = "proto3";
-package paxos_client;
+package paxos;
 option java_multiple_files = true;
 option java_package = "today.ihelio.paxoscomponents";
 
@@ -15,8 +15,4 @@ message DataInsertionResponse {
   string status = 2;
   string key = 3;
   string value = 4;
-}
-
-service PaxosClientService {
-  rpc CreateDate(DataInsertionRequest) returns (DataInsertionResponse);
 }

@@ -39,8 +39,4 @@ public class StubFactory {
   public PaxosServerServiceGrpc.PaxosServerServiceBlockingStub getBlockingStub(AbstractHost host) {
     return createBlockingStub(host);
   }
-
-  public void shutDownChannel() {
-    managedChannelMap.values().stream().map((C) -> C.shutdownNow());
-  }
 }

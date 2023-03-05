@@ -34,7 +34,7 @@ public class PaxosClient{
         dataInsertionRequest.getKey(),
         dataInsertionRequest.getValue());
     DataInsertionResponse response = blockingStub.withDeadlineAfter(5, SECONDS).createNewData(dataInsertionRequest);
-    logger.info("response status: " + response.getStatus());
+    logger.debug("response status: " + response.getStatus());
   }
 
   private DataInsertionRequest generateRandomeDataInsertionRequest() {
@@ -50,7 +50,7 @@ public class PaxosClient{
   public static void main(String[] args) throws InterruptedException {
     PaxosClient paxosClient = new PaxosClient("0.0.0.0", 14141);
     while (true) {
-      Thread.sleep(5000);
+      Thread.sleep(2000);
       paxosClient.createData();
     }
   }

@@ -2,6 +2,7 @@ package today.ihelio.paxos.task;
 
 import com.google.common.base.Stopwatch;
 import java.util.Set;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.inject.Inject;
@@ -30,15 +31,12 @@ public class PaxosConcensusTask implements Runnable {
 
   @Override public void run() {
     while (true) {
-      logger.info("host " + paxosServer.getHostID() + "has leader " + paxosServer.getLeaderID()
-          + " is leader: " + paxosServer.isLeader() + " has request:" + paxosServer.hasRequest());
       while (paxosServer.isLeader()) {
         try {
           Thread.sleep(3000);
         } catch (InterruptedException e) {
           throw new RuntimeException(e);
         }
-        logger.info("start paxos task... from " + paxosServer.getLeaderID());
         while (paxosServer.hasRequest() || nextProposal.get() != null) {
           Proposal proposalMsg;
           DataInsertionRequest dataInsertionRequest = null;
@@ -48,9 +46,8 @@ public class PaxosConcensusTask implements Runnable {
             dataInsertionRequest = paxosServer.pollClientRequest();
             proposalMsg = makeProposal(dataInsertionRequest);
           }
-          logger.info("start sync up for " + proposalMsg);
+          logger.info("replicate: proposal number " + proposalMsg.getProposalNumber() + " proposal value " + proposalMsg.getValue());
           if (!paxosServer.isMostUnaccepted()) {
-            logger.info("make proposal... from " + paxosServer.getLeaderID());
             Set<Future<PrepareResponse>> responseSets = paxosServer.makeProposalMsg(proposalMsg);
             Proposal returnedProposal =
                 paxosServer.processProposalResponse(responseSets, proposalMsg);
@@ -64,16 +61,25 @@ public class PaxosConcensusTask implements Runnable {
               }
               nextProposal.getAndSet(returnedProposal);
               break;
-              //  start sending accept msg
+            }
+          }
+          logger.info("send accept msg: proposal number " + proposalMsg.getProposalNumber() + " proposal value " + proposalMsg.getValue());
+          Set<Future<AcceptorResponse>> acceptResponseSets =
+              paxosServer.sendAcceptMsg(proposalMsg);
+          if (paxosServer.processAcceptMsgResponse(acceptResponseSets)) {
+            //logger.info("mark chosen");
+            paxosServer.setChosen(proposalMsg.getIndex(), proposalMsg.getValue());
+            //logger.info("firstUnchosen: " + paxosServer.getFirstUnchosenIndex());
+            //logger.info("hash: " + paxosServer.toString());
+            try {
+              paxosServer.processSuccessMsgResponse(acceptResponseSets);
+            } catch (ExecutionException e) {
+              throw new RuntimeException(e);
+            } catch (InterruptedException e) {
+              throw new RuntimeException(e);
             }
           } else {
-            Set<Future<AcceptorResponse>> acceptResponseSets =
-                paxosServer.sendAcceptMsg(proposalMsg);
-            if (paxosServer.processAcceptMsgResponse(acceptResponseSets)) {
-              paxosServer.setChoosen(proposalMsg.getIndex(), proposalMsg.getValue());
-            } else {
-              nextProposal.getAndSet(proposalMsg);
-            }
+            nextProposal.getAndSet(proposalMsg);
           }
         }
       }
